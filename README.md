@@ -3,7 +3,7 @@
 The course project offers a valuable opportunity to apply your data mining and data science skills
 to a significant and relevant real-world problem. You will work with a team, choosing a project
 topic after discussing it with the instructor. This project allows for great flexibility in terms of topic
-selection, so take advantage of this opportunity to make a significant impact! \
+selection, so take advantage of this opportunity to make a significant impact!
 ### Project requirements:
 - Your project must use non-trivial data. Possible datasets:
 - Previous projects and datasets
