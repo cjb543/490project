@@ -1,5 +1,4 @@
 # Project Prompt
-<hr/>
 ## Assignment Base Prompt:
 The course project offers a valuable opportunity to apply your data mining and data science skills
 to a significant and relevant real-world problem. You will work with a team, choosing a project
