@@ -57,6 +57,5 @@ greater detail. Discuss challenges faced, experimental results, and potential fu
 your work.
 
 ## Project-Specific Points
-<hr/>
 ### Group Members:
 ### Dependencies Used:
