@@ -59,6 +59,7 @@ your work.
 ## Project-Specific Points
 ### Group Members:
 - https://github.com/lij42
+- https://github.com/cjb543
 - https://github.com/mattgh2
 ### Dependencies Used:
 - Anaconda: https://www.anaconda.com/download
