@@ -62,4 +62,6 @@ your work.
 - https://github.com/cjb543
 - https://github.com/mattgh2
 ### Dependencies Used:
-- Anaconda: https://www.anaconda.com/download
+- Miniconda: https://www.anaconda.com/download
+- BeautifulSoup: https://beautiful-soup-4.readthedocs.io/en/latest/
+- requests: https://pypi.org/project/requests/
