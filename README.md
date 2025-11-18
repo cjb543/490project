@@ -63,3 +63,9 @@ your work.
 - https://github.com/mattgh2
 ### Dependencies Used:
 - Anaconda: https://www.anaconda.com/download
+- Github CLI
+- GraphQL
+
+
+
+
