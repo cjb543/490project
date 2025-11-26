@@ -208,3 +208,8 @@ __marimo__/
 
 *.env
 config.py
+
+bin/
+lib64
+pyvenv.cfg
+*.csv
