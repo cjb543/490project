@@ -4,6 +4,7 @@ import time
 import random
 from datetime import datetime
 from config import GITHUB_TOKEN
+from langdetect import detect, LangDetectException
 
 class GitHubScraper:
     def __init__(self, token):
@@ -28,13 +29,24 @@ class GitHubScraper:
         self.rate_limit_remaining = data['data']['rateLimit']['remaining']
         self.rate_limit_reset = data['data']['rateLimit']['resetAt']
         print(f"Rate limit: {self.rate_limit_remaining} remaining, resets at {self.rate_limit_reset}")
-        
+ 
+
     def exponential_backoff(self, attempt):
         """Calculate wait time with exponential backoff"""
         wait_time = min(300, (2 ** attempt) + random.uniform(0, 1))
         print(f"Backing off for {wait_time:.2f} seconds...")
         time.sleep(wait_time)
-        
+
+
+    def is_english(self, text):
+        if not text or not text.strip():
+            return False
+        try:
+            return detect(text) == "en"
+        except LangDetectException:
+            return False
+
+
     def fetch_repositories(self, language, stars_range, cursor=None, max_retries=5):
         """Fetch repositories for a given language and star range"""
         query = """
@@ -176,6 +188,8 @@ class GitHubScraper:
             return False
         if not repo_data['readme'] or repo_data['readme'].strip() == '':
             return False
+        if not self.is_english(repo_data['readme']):
+            return False
         return True
     
     def scrape_repos(self, target_count=10000, repos_per_language=1000):
@@ -192,7 +206,7 @@ class GitHubScraper:
             '500..1000',
             '100..500',
             '50..100',
-            '10..50'
+            '5..50'
         ]
         
         all_repos = []
