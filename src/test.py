@@ -15,6 +15,7 @@ section_kws['credits'] = set(['credit', 'acknowledge', 'author'])
 section_kws['table_of_contents'] = set(['content'])
 section_kws['contribution'] = set(['contribute', 'contribution'])
 
+# unimportant stuff
 c1, c2 = 0, 0
 for readme in df['readme']:
     readme = readme.lower()
@@ -27,6 +28,8 @@ print("\"How to use\": ", c2)
 
 
 sm = set()
+
+# garbage method for getting section headers
 for readme in df['readme']:
     readme = readme.lower()
     for line in readme.splitlines():
@@ -37,11 +40,13 @@ for readme in df['readme']:
 lsm = sorted(list(sm))
 # print(*(i + '\n' for i in lsm))
 
-h2 = set()
 
+h2 = set()
 mpp = defaultdict(lambda: {i: 0 for i in section_kws.keys()})
 
+# Better method for getting section headers
 for readme in df['readme']:
+    # github markdown -> abstract syntax tree
     ast = mistune.create_markdown(renderer='ast')
     tree = ast(readme)
     for node in tree:
@@ -54,6 +59,8 @@ for readme in df['readme']:
                             if k in raw:
                                 mpp[readme][i] = 1
                     h2.add(raw)
+
+# Verifying
 it1 = iter(mpp.keys())
 it2 = iter(mpp.values())
 for i in range(1):
