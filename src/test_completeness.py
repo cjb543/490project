@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
-import pandas as pd
 import numpy as np
+import pandas as pd
+from langdetect import detect
 
 from completeness import struture_completeness
 
@@ -12,6 +13,7 @@ df: pd.DataFrame = pd.read_csv('github_repos_final.csv')
 readmes = list(df['readme'].to_numpy())
 test = struture_completeness(readmes)
 test.compute(READMES)
+
 
 for i in range(SHOW):
     print(df.iloc[i][['name', 'owner']])
