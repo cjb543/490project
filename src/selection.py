@@ -1,11 +1,13 @@
-import requests
-import pandas as pd
-import time
+from config import GITHUB_TOKEN
 import random
 import re
-from datetime import datetime
-from config import GITHUB_TOKEN
-from langdetect import detect_langs, LangDetectException
+import time
+from datetime import datetime, timezone
+
+import pandas as pd
+import requests
+
+from langdetect import LangDetectException, detect_langs
 
 
 class GitHubScraper:
@@ -29,7 +31,11 @@ class GitHubScraper:
         data = r.json()
         self.rate_limit_remaining = data['data']['rateLimit']['remaining']
         self.rate_limit_reset = data['data']['rateLimit']['resetAt']
-        print(f"Rate limit: {self.rate_limit_remaining} remaining, resets at {self.rate_limit_reset}")
+        reset = datetime.astimezone(datetime.fromisoformat(self.rate_limit_reset.replace("Z", "+00:00")))
+        print(f"Rate limit: {self.rate_limit_remaining} remaining, resets at {reset}")
+
+        now = datetime.now().astimezone()
+        print(f"Resets in {reset - now}")
 
     def exponential_backoff(self, attempt):
         wait = min(300, (2 ** attempt) + random.uniform(0, 1))
@@ -76,7 +82,7 @@ class GitHubScraper:
     def fetch_repositories(self, language, stars_range, cursor=None, max_retries=5):
         query = """
         query($query: String!, $cursor: String) {
-          search(query: $query, type: REPOSITORY, first: 15, after: $cursor) {
+          search(query: $query, type: REPOSITORY, first: 10, after: $cursor) {
             pageInfo {
               hasNextPage
               endCursor
@@ -191,7 +197,12 @@ class GitHubScraper:
             'C++', 'PHP', 'Shell', 'C', 'Ruby'
         ]
         star_ranges = [
-            '1000..5000',
+            '3500..5000',
+            '3000..3500',
+            '2500..3000',
+            '2000..2500',
+            '1500..2000',
+            '1000..1500',
             '500..1000',
             '100..500',
             '50..100',
@@ -224,10 +235,10 @@ class GitHubScraper:
                 pages = 0
 
                 while pages < 10 and len(language_repos) < repos_per_language and total < target_count:
-                    if self.rate_limit_remaining < 100:
+                    if self.rate_limit_remaining < 10:
                         print("Rate limit low, waiting...")
-                        time.sleep(60)
                         self.check_rate_limit()
+                        exit()
 
                     result = self.fetch_repositories(language, star_range, cursor)
                     if not result or not result.get('nodes'):
@@ -247,7 +258,7 @@ class GitHubScraper:
                             if len(language_repos) >= repos_per_language:
                                 break
 
-                    print(f"  Valid so far in {language}: {len(language_repos)}/{repos_per_language}")
+                    print(f" Valid so far in {language}: {len(language_repos)}/{repos_per_language}")
 
                     info = result.get('pageInfo', {})
                     if not info.get('hasNextPage'):
@@ -267,7 +278,6 @@ class GitHubScraper:
         random.shuffle(all_repos)
         return all_repos[:target_count]
 
-
     def save_to_csv(self, repos, filename='raw_repos.csv'):
         df = pd.DataFrame(repos)
         if 'is_fork' in df.columns:
@@ -275,7 +285,6 @@ class GitHubScraper:
         df.to_csv(filename, index=False, encoding='utf-8')
         print(f"\nSaved {len(repos)} repositories to {filename}")
         return df
-
 
     def test_language_detection(self, sample_size=50):
         print("Testing language detection...")
@@ -292,4 +301,3 @@ if __name__ == "__main__":
     repos = scraper.scrape_repos(target_count=10000, repos_per_language=1000)
     df = scraper.save_to_csv(repos, 'raw_repos.csv')
     print(f"Total repositories: {len(df)}")
-
