@@ -1,15 +1,16 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from langdetect import detect
 
 from completeness import struture_completeness
 
-READMES = 500
+READMES = 3000
 SHOW = 3
 
 
-df: pd.DataFrame = pd.read_csv('github_repos_final.csv')
+df: pd.DataFrame = pd.read_csv('raw_repos.csv')
+df = df.sample(frac=1, random_state=42).reset_index(drop=True)
+
 readmes = list(df['readme'].to_numpy())
 test = struture_completeness(readmes)
 test.compute(READMES)
