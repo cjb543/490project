@@ -45,7 +45,6 @@ class RepoFeatureEngineer:
         # Unicode ranges for Chinese characters (CJK Unified Ideographs)
         chinese_pattern = re.compile(r'[\u4e00-\u9fff\u3400-\u4dbf\U00020000-\U0002a6df\U0002a700-\U0002b73f\U0002b740-\U0002b81f\U0002b820-\U0002ceaf\uf900-\ufaff\U0002f800-\U0002fa1f]')
         return bool(chinese_pattern.search(text))
-    
     def _filter_chinese_readmes(self):
         """Remove repositories with Chinese characters in README"""
         initial_count = len(self.df)
