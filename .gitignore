@@ -5,3 +5,4 @@ pyvenv.cfg
 share/
 __pycache__/
 config.py
+*.csv
