@@ -1,56 +1,54 @@
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import seaborn as sns
+
 from completeness import struture_completeness
-from config import GITHUB_TOKEN
 from get_contributors import contributors
 
 N = 500
 
 df = pd.read_csv("repo_data_numbers.csv")
-
 df2 = pd.read_csv("raw_repos.csv")
 df2.dropna()
-df2.drop("contributors", axis=1, inplace=True)
 
-readmes = list(df2["readme"])
+readmes = df2["readme"].to_numpy()
 
-A = []
-for c in df["contributors"]:
-    if c <= 100:
-        A.append(c)
+# contributors series w/ <= 300 contributors
+c = df2[df2["contributors"] <= 300]["contributors"]
 
-# Get contributors
-contributors = contributors(GITHUB_TOKEN)
-df2["contributors"] = contributors.get_contributors(df2)
+# First from each tuple
+idx = np.array([i[0] for i in list(c.items())])
+print(idx[:5])
 
-print(df2[["name", "owner", "contributors"]].head())
+
+# df2.drop("contributors", axis=1, inplace=True)
+# df2["contributors"] = contributors.get_contributors(df2)
+# print(df2[["name", "owner", "contributors"]].head())
 
 # Test
-fig, ax = plt.subplots(nrows=1, ncols=2)
+# fig, ax = plt.subplots(nrows=1, ncols=2)
+# count, edges, bars = ax[0].hist(c)
+# ax[0].bar_label(bars)
+# plt.show()
 
-count, edges, bars = ax[0].hist(A)
-ax[0].bar_label(bars)
+
+x = readmes[idx]
+X = []
+
+sc = struture_completeness(x)
+sc.compute(N)
+
+for i in x:
+    X.append("Yes" if sc.get_readme_completeness(i)["contribution"] else "No")
+
+
+sns.set_theme(style="ticks", palette="pastel")
+df3 = pd.DataFrame({"has contribution section": X[:N], "Number of contributors": c.to_numpy()[:N]})
+
+sns.boxplot(data=df3, x="has contribution section", y="Number of contributors")
+plt.tight_layout()
 plt.show()
 
-# sc = struture_completeness(readmes)
-# sc.compute(N)
-#
-# x = []
-# for i in range(N):
-#     readme = readmes[i]
-#     d: dict[str, int] = sc.get_readme_completeness(readme)
-#     x.append(d["contribution"])
-#
-# df3 = pd.DataFrame({"x": x, "y": list(df["contributors"][:N])})
-# print(df.info())
-#
-# sns.set_theme(style="ticks", palette="pastel")
-# fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(10, 5))
-#
-# sns.boxplot(data=df3, x="x", y="y", ax=axes[0])
-# axes[0].set_xlabel("Has contribution section")
-# axes[0].set_ylabel("Number of contributors")
-#
-# plt.tight_layout()
-# plt.show()
+
+# Plot has contributor section against number of forks
