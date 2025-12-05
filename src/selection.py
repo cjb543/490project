@@ -15,6 +15,7 @@ class GitHubScraper:
         self.headers = {"Authorization": f"Bearer {token}"}
         self.rate_limit_remaining = 5000
         self.rate_limit_reset = None
+        self.seen_repos = set()  # Track collected repos to avoid duplicates
 
     def check_rate_limit(self):
         query = """
@@ -256,17 +257,40 @@ class GitHubScraper:
         # Add date ranges for better randomization
         year_ranges = [
             '2024-01-01..2025-12-31',
-            '2022-01-01..2023-12-31', 
-            '2020-01-01..2021-12-31',
-            '2018-01-01..2019-12-31',
-            '2015-01-01..2017-12-31'
+            '2023-01-01..2023-12-31',
+            '2022-01-01..2022-12-31', 
+            '2021-01-01..2021-12-31',
+            '2020-01-01..2020-12-31',
+            '2019-01-01..2019-12-31',
+            '2018-01-01..2018-12-31',
+            '2017-01-01..2017-12-31',
+            '2016-01-01..2016-12-31',
+            '2015-01-01..2015-12-31'
         ]
 
         all_repos = []
         print(f"Starting scrape for {target_count} repositories...\n")
         self.check_rate_limit()
+        
+        stuck_counter = 0
+        last_count = 0
 
         while len(all_repos) < target_count:
+            # Check if we're stuck (no progress in last iteration)
+            if len(all_repos) == last_count:
+                stuck_counter += 1
+                if stuck_counter >= 3:
+                    print(f"\n⚠️ Stuck at {len(all_repos)} repos for 3 iterations.")
+                    print("Expanding search to lower star ranges...")
+                    # Add more lenient star ranges
+                    if '1..5' not in star_ranges:
+                        star_ranges.extend(['1..5', '0..1'])
+                    stuck_counter = 0
+            else:
+                stuck_counter = 0
+            
+            last_count = len(all_repos)
+            
             # Shuffle for diversity
             random.shuffle(languages)
             random.shuffle(star_ranges)
@@ -284,11 +308,12 @@ class GitHubScraper:
                     year_range = random.choice(year_ranges)
 
                     print(f"\nFetching {language} repos with {star_range} stars, created {year_range}...")
-                    print(f"Progress: {len(all_repos)}/{target_count} valid repos collected")
+                    print(f"Progress: {len(all_repos)}/{target_count} valid repos | Seen: {len(self.seen_repos)} total")
                     
                     cursor = None
                     pages = 0
                     max_pages = 20
+                    found_new_in_query = False
 
                     while pages < max_pages and len(all_repos) < target_count:
                         if self.rate_limit_remaining < 100:
@@ -304,10 +329,18 @@ class GitHubScraper:
                             if not node:
                                 continue
                             
+                            # Check for duplicates first
+                            repo_id = f"{node['owner']['login']}/{node['name']}"
+                            if repo_id in self.seen_repos:
+                                print(f"  ⊘ Duplicate: {repo_id}")
+                                continue
+                            
+                            self.seen_repos.add(repo_id)
                             data = self.parse_repo_data(node)
                             
                             if self.is_valid_repo(data):
                                 all_repos.append(data)
+                                found_new_in_query = True
                                 print(f"  ✓ Added: {data['owner']}/{data['name']} ({len(all_repos)}/{target_count})")
                                 
                                 if len(all_repos) >= target_count:
@@ -327,10 +360,20 @@ class GitHubScraper:
 
                         cursor = info.get('endCursor')
                         pages += 1
+                    
+                    # Break out of this combo early if no new repos found
+                    if not found_new_in_query and pages > 5:
+                        print("  → No new repos in this combo, moving on...")
+                        break
 
-            # If we've exhausted all combinations but haven't hit target
-            if len(all_repos) < target_count:
-                print(f"\nWarning: Exhausted search space with {len(all_repos)} repos. Continuing...")
+            # Safety check: if we've done multiple full passes with no progress
+            if len(all_repos) < target_count and stuck_counter == 0:
+                print(f"\nCompleted search cycle. Collected {len(all_repos)}/{target_count}")
+                if len(all_repos) < target_count * 0.7:
+                    print("⚠️ May not reach target with current filters. Consider:")
+                    print("  - Lowering min_prose_length")
+                    print("  - Reducing confidence_threshold")
+                    print("  - Accepting single-contributor repos")
 
         random.shuffle(all_repos)
         return all_repos
