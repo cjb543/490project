@@ -6,20 +6,41 @@ import seaborn as sns
 from completeness import struture_completeness
 from get_contributors import contributors
 
-N = 500
-
 df = pd.read_csv("repo_data_numbers.csv")
-df2 = pd.read_csv("raw_repos.csv")
-df2.dropna()
-
-readmes = df2["readme"].to_numpy()
-
+print(df[df.isna().any(axis=1)])
 # contributors series w/ <= 300 contributors
-c = df2[df2["contributors"] <= 300]["contributors"]
+c = df[df["contributors"] <= 300]["contributors"]
 
-# First from each tuple
 idx = np.array([i[0] for i in list(c.items())])
-print(idx[:5])
+X: np.ndarray[np.int32] = df.loc[idx]['has_contributing'].to_numpy()
+print(X)
+
+fig, ax = plt.subplots(nrows=1, ncols=2)
+sns.set_theme(style="ticks", palette="pastel")
+
+# Only looking at <= 300 contributors. Repos over 300 are treated as outliers.
+df3 = pd.DataFrame({"has contribution section": X, "Number of contributors": c.to_numpy()})
+sns.boxplot(data=df3, x="has contribution section", y="Number of contributors", ax=ax[0])
+
+# forks = df2['forks'].to_numpy()
+# df4 = pd.DataFrame({"has contribution section": x, "Number of Forks": forks})
+# sns.boxplot(data=df4, x="has contribution section", y="Number of Forks", ax=ax[1])
+plt.tight_layout()
+plt.show()
+
+
+# Section completeness score vs stars
+# scores: list[int] = []
+# for readme in readmes:
+#     comp: dict[str, int] = sc.get_readme_completeness(readme)
+#     scores.append(comp['total'])
+#
+# stars = df2['stars']
+# sns.scatterplot(data=pd.Dataframe({'section completeness score': scores, 'stars': np.log(stars)}), x='section completeness score', y='stars')
+# plt.plot()
+
+# all individual sections vs stars
+# fig, ax = plt.subplots(nrows=3, ncols=3)
 
 
 # df2.drop("contributors", axis=1, inplace=True)
@@ -31,24 +52,3 @@ print(idx[:5])
 # count, edges, bars = ax[0].hist(c)
 # ax[0].bar_label(bars)
 # plt.show()
-
-
-x = readmes[idx]
-X = []
-
-sc = struture_completeness(x)
-sc.compute(N)
-
-for i in x:
-    X.append("Yes" if sc.get_readme_completeness(i)["contribution"] else "No")
-
-
-sns.set_theme(style="ticks", palette="pastel")
-df3 = pd.DataFrame({"has contribution section": X[:N], "Number of contributors": c.to_numpy()[:N]})
-
-sns.boxplot(data=df3, x="has contribution section", y="Number of contributors")
-plt.tight_layout()
-plt.show()
-
-
-# Plot has contributor section against number of forks

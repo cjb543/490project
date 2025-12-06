@@ -11,7 +11,7 @@ class struture_completeness:
         self.__section_kws['description'] = ['describe', 'description', 'overview', 'about', 'summary', 'introduction', 'what is']
         self.__section_kws['usage'] = ['use', 'usage', 'quickstart', 'run', 'start document', 'docs example', 'demo', 'sample troubleshoot']
         self.__section_kws['installation'] = ['install', 'build', 'setup', 'download', 'compile']
-        self.__section_kws['licence'] = ['license', 'licence', 'copyright']
+        self.__section_kws['license'] = ['license', 'licence', 'copyright']
         self.__section_kws['credits'] = ['credit', 'acknowledge', 'author']
         self.__section_kws['table_of_contents'] = ['content']
         self.__section_kws['contribution'] = ['contribute', 'contribution', 'contributing']
