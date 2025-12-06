@@ -1,4 +1,3 @@
-from config import GITHUB_TOKEN
 import random
 import re
 import time
@@ -6,8 +5,9 @@ from datetime import datetime, timezone
 
 import pandas as pd
 import requests
-
 from langdetect import LangDetectException, detect_langs
+
+from config import GITHUB_TOKEN
 
 
 class GitHubScraper:
@@ -17,6 +17,7 @@ class GitHubScraper:
         self.headers = {"Authorization": f"Bearer {token}"}
         self.rate_limit_remaining = 5000
         self.rate_limit_reset = None
+        self.seen_repos = set()  # Track collected repos to avoid duplicates
 
     def check_rate_limit(self):
         query = """
@@ -60,10 +61,19 @@ class GitHubScraper:
     def is_english(self, text, min_prose_length=150, confidence_threshold=0.9):
         if not text or not text.strip():
             return False
+
+        # Check original text for CJK characters (Chinese/Japanese/Korean)
+        cjk_pattern = re.compile(r'[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]+')
+        cjk_chars = len(cjk_pattern.findall(text))
+        if cjk_chars > 20:  # More than 20 CJK characters = likely not English
+            print(f"    Rejected: Contains {cjk_chars} CJK characters")
+            return False
+
         prose = self.extract_prose_only(text)
         if len(prose) < min_prose_length:
             print(f"    Rejected: Insufficient prose ({len(prose)} chars)")
             return False
+
         try:
             detected = detect_langs(prose)
             en_prob = 0.0
@@ -79,7 +89,41 @@ class GitHubScraper:
             print("    Rejected: Language detection failed")
             return False
 
-    def fetch_repositories(self, language, stars_range, cursor=None, max_retries=5):
+    def get_contributor_count(self, owner, name, max_retries=3):
+        """Fetch actual contributor count via REST API"""
+        url = f"https://api.github.com/repos/{owner}/{name}/contributors"
+        params = {"per_page": 1, "anon": "true"}
+
+        for attempt in range(max_retries):
+            try:
+                r = requests.get(url, headers=self.headers, params=params, timeout=10)
+                if r.status_code == 200:
+                    # Check Link header for total count
+                    link_header = r.headers.get('Link', '')
+                    if 'rel="last"' in link_header:
+                        # Extract page number from last page URL
+                        match = re.search(r'page=(\d+)>; rel="last"', link_header)
+                        if match:
+                            return int(match.group(1))
+                    # If no pagination, return array length
+                    return len(r.json())
+                elif r.status_code == 204:
+                    return 0
+                elif r.status_code in (403, 429):
+                    if attempt < max_retries - 1:
+                        time.sleep(2 ** attempt)
+                        continue
+                    return 0
+                else:
+                    return 0
+            except Exception:
+                if attempt < max_retries - 1:
+                    time.sleep(1)
+                    continue
+                return 0
+        return 0
+
+    def fetch_repositories(self, language, stars_range, cursor=None, year_range=None, max_retries=5):
         query = """
         query($query: String!, $cursor: String) {
           search(query: $query, type: REPOSITORY, first: 10, after: $cursor) {
@@ -106,7 +150,6 @@ class GitHubScraper:
                 object(expression: "HEAD:README.md") {
                   ... on Blob { text }
                 }
-                mentionableUsers(first: 1) { totalCount }
               }
             }
           }
@@ -117,7 +160,10 @@ class GitHubScraper:
         }
         """
 
-        search_query = f"language:{language} stars:{stars_range} fork:false"
+        # Add random sorting using pushed date ranges for pseudo-randomization
+        search_query = f"language:{language} stars:{stars_range} fork:false sort:updated"
+        if year_range:
+            search_query += f" created:{year_range}"
         variables = {"query": search_query, "cursor": cursor}
 
         for attempt in range(max_retries):
@@ -166,10 +212,15 @@ class GitHubScraper:
                       .get('target', {}) \
                       .get('history', {}) \
                       .get('totalCount', 0)
-        contributors = node.get('mentionableUsers', {}).get('totalCount', 0)
+        owner = node['owner'].get('login', '')
+        name = node.get('name', '')
+
+        # Get actual contributor count via REST API
+        contributors = self.get_contributor_count(owner, name)
+
         return {
-            'name': node.get('name', ''),
-            'owner': node['owner'].get('login', ''),
+            'name': name,
+            'owner': owner,
             'stars': node.get('stargazerCount', 0),
             'forks': node.get('forkCount', 0),
             'contributors': contributors,
@@ -191,7 +242,7 @@ class GitHubScraper:
             return False
         return True
 
-    def scrape_repos(self, target_count=10000, repos_per_language=1000):
+    def scrape_repos(self, target_count=10000):
         languages = [
             'JavaScript', 'Python', 'Java', 'TypeScript', 'C#',
             'C++', 'PHP', 'Shell', 'C', 'Ruby'
@@ -209,74 +260,126 @@ class GitHubScraper:
             '5..50'
         ]
 
-        all_repos = []
-        total = 0
+        # Add date ranges for better randomization
+        year_ranges = [
+            '2024-01-01..2025-12-31',
+            '2023-01-01..2023-12-31',
+            '2022-01-01..2022-12-31',
+            '2021-01-01..2021-12-31',
+            '2020-01-01..2020-12-31',
+            '2019-01-01..2019-12-31',
+            '2018-01-01..2018-12-31',
+            '2017-01-01..2017-12-31',
+            '2016-01-01..2016-12-31',
+            '2015-01-01..2015-12-31'
+        ]
 
+        all_repos = []
         print(f"Starting scrape for {target_count} repositories...\n")
         self.check_rate_limit()
-        random.shuffle(languages)
 
-        for language in languages:
-            if total >= target_count:
-                break
+        stuck_counter = 0
+        last_count = 0
 
-            print(f"\n--- Scraping {language} ---")
-            language_repos = []
+        while len(all_repos) < target_count:
+            # Check if we're stuck (no progress in last iteration)
+            if len(all_repos) == last_count:
+                stuck_counter += 1
+                if stuck_counter >= 3:
+                    print(f"\n⚠️ Stuck at {len(all_repos)} repos for 3 iterations.")
+                    print("Expanding search to lower star ranges...")
+                    # Add more lenient star ranges
+                    if '1..5' not in star_ranges:
+                        star_ranges.extend(['1..5', '0..1'])
+                    stuck_counter = 0
+            else:
+                stuck_counter = 0
 
-            ranges = star_ranges.copy()
-            random.shuffle(ranges)
+            last_count = len(all_repos)
 
-            for star_range in ranges:
-                if total >= target_count or len(language_repos) >= repos_per_language:
+            # Shuffle for diversity
+            random.shuffle(languages)
+            random.shuffle(star_ranges)
+            random.shuffle(year_ranges)
+
+            for language in languages:
+                if len(all_repos) >= target_count:
                     break
 
-                print(f"Fetching {language} repos with {star_range} stars...")
-                cursor = None
-                pages = 0
-
-                while pages < 10 and len(language_repos) < repos_per_language and total < target_count:
-                    if self.rate_limit_remaining < 10:
-                        print("Rate limit low, waiting...")
-                        self.check_rate_limit()
-                        exit()
-
-                    result = self.fetch_repositories(language, star_range, cursor)
-                    if not result or not result.get('nodes'):
+                for star_range in star_ranges:
+                    if len(all_repos) >= target_count:
                         break
 
-                    for node in result['nodes']:
-                        if not node:
-                            continue
-                        data = self.parse_repo_data(node)
-                        if self.is_valid_repo(data):
-                            language_repos.append(data)
-                            all_repos.append(data)
-                            total += 1
-                            if total >= target_count:
-                                print("Reached global target.")
-                                return all_repos
-                            if len(language_repos) >= repos_per_language:
-                                break
+                    # Randomly pick a year range for this query
+                    year_range = random.choice(year_ranges)
 
-                    print(f" Valid so far in {language}: {len(language_repos)}/{repos_per_language}")
+                    cursor = None
+                    pages = 0
+                    max_pages = 20
+                    found_new_in_query = False
 
-                    info = result.get('pageInfo', {})
-                    if not info.get('hasNextPage'):
+                    while pages < max_pages and len(all_repos) < target_count:
+                        if self.rate_limit_remaining < 100:
+                            print("Rate limit low, waiting...")
+                            time.sleep(60)
+                            self.check_rate_limit()
+
+                        result = self.fetch_repositories(language, star_range, cursor, year_range)
+                        if not result or not result.get('nodes'):
+                            break
+
+                        for node in result['nodes']:
+                            if not node:
+                                continue
+
+                            # Check for duplicates first
+                            repo_id = f"{node['owner']['login']}/{node['name']}"
+                            if repo_id in self.seen_repos:
+                                print(f"  ⊘ Duplicate: {repo_id}")
+                                continue
+
+                            self.seen_repos.add(repo_id)
+                            data = self.parse_repo_data(node)
+
+                            if self.is_valid_repo(data):
+                                all_repos.append(data)
+                                found_new_in_query = True
+                                print(f"  ✓ Added: {data['owner']}/{data['name']} ({len(all_repos)}/{target_count})")
+
+                                if len(all_repos) >= target_count:
+                                    print(f"\n🎉 Reached target: {target_count} valid repos collected!")
+                                    random.shuffle(all_repos)
+                                    return all_repos
+                            else:
+                                print(f"  ✗ Filtered out: {data['owner']}/{data['name']}")
+
+                        # Save intermediate results
+                        if len(all_repos) > 0 and len(all_repos) % 500 == 0:
+                            self.save_to_csv(all_repos, f'github_repos_intermediate_{len(all_repos)}.csv')
+
+                        info = result.get('pageInfo', {})
+                        if not info.get('hasNextPage'):
+                            break
+
+                        cursor = info.get('endCursor')
+                        pages += 1
+
+                    # Break out of this combo early if no new repos found
+                    if not found_new_in_query and pages > 5:
+                        print("  → No new repos in this combo, moving on...")
                         break
 
-                    cursor = info.get('endCursor')
-                    pages += 1
-
-                # end while
-            # end star range loop
-
-            print(f"Collected so far: {total}/{target_count}")
-
-            if total and total % 1000 == 0:
-                self.save_to_csv(all_repos, f'github_repos_intermediate_{total}.csv')
+            # Safety check: if we've done multiple full passes with no progress
+            if len(all_repos) < target_count and stuck_counter == 0:
+                print(f"\nCompleted search cycle. Collected {len(all_repos)}/{target_count}")
+                if len(all_repos) < target_count * 0.7:
+                    print("⚠️ May not reach target with current filters. Consider:")
+                    print("  - Lowering min_prose_length")
+                    print("  - Reducing confidence_threshold")
+                    print("  - Accepting single-contributor repos")
 
         random.shuffle(all_repos)
-        return all_repos[:target_count]
+        return all_repos
 
     def save_to_csv(self, repos, filename='raw_repos.csv'):
         df = pd.DataFrame(repos)
@@ -298,6 +401,6 @@ class GitHubScraper:
 
 if __name__ == "__main__":
     scraper = GitHubScraper(GITHUB_TOKEN)
-    repos = scraper.scrape_repos(target_count=10000, repos_per_language=1000)
+    repos = scraper.scrape_repos(target_count=10000)
     df = scraper.save_to_csv(repos, 'raw_repos.csv')
-    print(f"Total repositories: {len(df)}")
+    print(f"\n✅ Final count: {len(df)} repositories")
