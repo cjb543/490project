@@ -1,3 +1,4 @@
+# Authors: Christopher Benson, Matt Warner, Dave Joneja
 OUTLIER_REPOS = [
     'Waterfox',           # 600k commits
     'Matplotplusplus',    # 700+ code blocks
