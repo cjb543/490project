@@ -39,6 +39,7 @@ class RepoFeatureEngineer:
         self._filter_chinese_readmes()
         self.__handle_missing()
         self.df.reset_index()
+        self.df.to_csv('filtered_readmes.csv', index=False)
 
     def __convert_to_html(self, readme: str):
         return mistune.html(readme)

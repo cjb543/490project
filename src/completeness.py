@@ -12,12 +12,15 @@ class html_parser(HTMLParser):
 
         self.at_heading: bool = False
         self.at_pre: bool = False
+        self.at_code: bool = False
+        self.at_table: bool = False
 
         self.code_blocks: int = 0
         self.inline_code_cnt: int = 0
         self.heading_data: list[str] = []
         self.image_cnt: int = 0
         self.list_item_cnt: int = 0
+        self.text_data: list[str] = []
 
     def handle_starttag(self, tag, attrs) -> None:
         self.start_tags.append(tag)
@@ -25,6 +28,7 @@ class html_parser(HTMLParser):
         if tag == "pre":
             self.at_pre = True
         elif tag == "code":
+            self.at_code = True
             if self.at_pre:
                 self.code_blocks += 1
             else:
@@ -33,7 +37,8 @@ class html_parser(HTMLParser):
             self.image_cnt += 1
         elif tag == 'li':
             self.list_item_cnt += 1
-
+        elif tag == 'table':
+            self.at_table = True
         elif tag in self.headings:
             self.heading_tags.append(tag)
             self.at_heading = True
@@ -43,21 +48,34 @@ class html_parser(HTMLParser):
             self.at_heading = False
         elif tag == 'pre':
             self.at_pre = False
+        elif tag == 'code':
+            self.at_code = False
+        elif tag == 'table':
+            self.at_table = False
 
     def handle_data(self, data: str) -> None:
+        data = data.strip()
+        if data == "":
+            return
         if self.at_heading:
             self.heading_data.append(data)
+        elif not self.at_code and not self.at_table:
+            self.text_data.append(data)
 
     def clear(self):
         self.reset()
         self.start_tags = []
         self.heading_tags = []
         self.at_heading = False
+        self.at_code = False
+        self.at_pre = False
+        self.at_table = False
         self.code_blocks = 0
         self.inline_code_cnt = 0
         self.image_cnt = 0
         self.heading_data = []
         self.list_item_cnt = 0
+        self.text_data = []
 
 
 class struture_completeness:
