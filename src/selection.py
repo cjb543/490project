@@ -1,3 +1,13 @@
+# Author(s): Christopher Benson, Matt Warner
+# 
+# Description: Scrapes GitHub repositories using the GraphQL API,
+# applying filters to select high-quality, English-language projects.
+# The script handles rate limiting, retries with exponential backoff,
+# and saves the final dataset to a CSV file.
+# 
+# Dependencies: requests, pandas, langdetect, datetime
+
+
 import requests
 import pandas as pd
 import time
