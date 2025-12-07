@@ -3,6 +3,7 @@ import warnings
 from datetime import datetime
 
 import langdetect
+import mistune
 import numpy as np
 import pandas as pd
 import spacy
@@ -36,6 +37,11 @@ class RepoFeatureEngineer:
         self.df = pd.read_csv(csv_path)
         self._filter_outliers()
         self._filter_chinese_readmes()
+        self.__handle_missing()
+        self.df.reset_index()
+
+    def __convert_to_html(self, readme: str):
+        return mistune.html(readme)
 
     def _filter_outliers(self):
         """Remove hardcoded outlier repositories"""
@@ -44,13 +50,12 @@ class RepoFeatureEngineer:
         filtered_count = initial_count - len(self.df)
         print(f"Filtered out {filtered_count} outlier repos. Remaining: {len(self.df)}")
 
-    def handle_missing(self):
+    def __handle_missing(self):
         sz = self.df.shape[0]
         missing_rows = self.df[self.df.isna().any(axis=1)]
-        print(missing_rows.shape[0], " missing rows")
-        print(missing_rows)
+        print(missing_rows.shape[0], " Missing rows")
         self.df = self.df.dropna()
-        print(f"dropped {sz - self.df.shape[0]} rows")
+        print(f"Dropped {sz - self.df.shape[0]} rows")
 
     def _has_chinese_characters(self, text):
         """Check if text contains Chinese characters"""
@@ -73,54 +78,59 @@ class RepoFeatureEngineer:
         """Extract comprehensive README quality metrics"""
         features = []
         total = len(self.df)
-        sc = struture_completeness(self.df['readme'].tolist())
+
+        readmes: list[str] = self.df['readme'].tolist()
+        html_readmes: list[str] = [self.__convert_to_html(readme) for readme in readmes]
+        self.df['html_readme'] = html_readmes
+
+        sc = struture_completeness(html_readmes)
         sc.compute()
 
         for idx, row in self.df.iterrows():
             if (idx + 1) % 10 == 0:
                 print(f"Processing {idx + 1}/{total}")
 
-            readme = str(row['readme']) if pd.notna(row['readme']) else ''
+            html_readme = str(row['html_readme']) if pd.notna(row['html_readme']) else ''
 
             # Token count using spaCy (linguistic tokens, not char count)
             try:
-                if nlp and readme:
+                if nlp and html_readme:
                     # Clean the text to avoid encoding issues
-                    clean_readme = readme[:100000].encode('utf-8', errors='ignore').decode('utf-8')
+                    clean_readme = html_readme[:100000].encode('utf-8', errors='ignore').decode('utf-8')
                     doc = nlp(clean_readme)
                     token_count = len(doc)
                     noun_count = sum(1 for token in doc if token.pos_ == "NOUN")
                     verb_count = sum(1 for token in doc if token.pos_ == "VERB")
                     adj_count = sum(1 for token in doc if token.pos_ == "ADJ")
                 else:
-                    token_count = len(readme.split())
+                    token_count = len(html_readme.split())
                     noun_count = verb_count = adj_count = 0
             except Exception:
-                token_count = len(readme.split())
+                token_count = len(html_readme.split())
                 noun_count = verb_count = adj_count = 0
 
+            d: dict[str, int] = sc.get_readme_completeness(html_readme)
             # Structure metrics
-            header_count = len(re.findall(r'^#{1,6}\s', readme, re.MULTILINE))
-            code_block_count = len(re.findall(r'```[\s\S]*?```', readme))
-            inline_code_count = len(re.findall(r'`[^`]+`', readme))
-            image_count = len(re.findall(r'!\[([^\]]*)\]\(([^\)]+)\)', readme))
-            list_item_count = len(re.findall(r'^\s*[\*\-\+]\s', readme, re.MULTILINE))
+            header_count = d['heading_cnt']
+            code_block_count = d['code_block_cnt']
+            inline_code_count = d['inline_code_cnt']
+            image_count = d['image_cnt']
+            list_item_count = d['list_item_cnt']
 
             # Section detection (common sections)
 
-            d: dict[str, int] = sc.get_readme_completeness(readme)
+            has_description = d['description']
             has_installation = d['installation']
             has_usage = d['usage']
             has_contributing = d['contribution']
             has_license = d['license']
             has_toc = d['table_of_contents']
-            has_badges = bool(re.search(r'\[!\[', readme))
-
+            has_credits = d['credits']
             section_count = d['total']
 
             # Readability metrics (using TextBlob for sentiment/subjectivity)
             try:
-                blob = TextBlob(readme[:5000])
+                blob = TextBlob(html_readme[:5000])
                 sentiment_polarity = blob.sentiment.polarity
                 sentiment_subjectivity = blob.sentiment.subjectivity
             except:
@@ -128,14 +138,16 @@ class RepoFeatureEngineer:
                 sentiment_subjectivity = 0
 
             # Complexity metrics
-            avg_word_length = np.mean([len(w) for w in readme.split()]) if token_count > 0 else 0
-            avg_sentence_length = token_count / max(1, len(re.split(r'[.!?]+', readme)))
+            avg_word_length = np.mean([len(w) for w in html_readme.split()]) if token_count > 0 else 0
+            avg_sentence_length = token_count / max(1, len(re.split(r'[.!?]+', html_readme)))
 
-            # Documentation completeness score (0-1)
             completeness_indicators = [
-                has_installation, has_usage, has_contributing,
-                has_license, has_toc, has_badges
+                has_description, has_installation, has_usage, has_contributing,
+                has_license, has_toc, has_credits
             ]
+
+            total_sections = sum(completeness_indicators)
+            # Documentation completeness score (0-1)
             completeness_score = sum(completeness_indicators) / len(completeness_indicators)
 
             features.append({
@@ -148,18 +160,20 @@ class RepoFeatureEngineer:
                 'inline_code_count': inline_code_count,
                 'image_count': image_count,
                 'list_item_count': list_item_count,
+                'has_description': has_description,
                 'has_installation': has_installation,
                 'has_usage': has_usage,
                 'has_contributing': has_contributing,
                 'has_license': has_license,
-                'has_badges': has_badges,
                 'has_toc': has_toc,
+                'has_credits': has_credits,
                 'section_count': section_count,
                 'sentiment_polarity': sentiment_polarity,
                 'sentiment_subjectivity': sentiment_subjectivity,
                 'avg_word_length': avg_word_length,
                 'avg_sentence_length': avg_sentence_length,
-                'completeness_score': completeness_score
+                'completeness_score': completeness_score,
+                'total_sections': total_sections
             })
 
         return pd.DataFrame(features)
@@ -215,10 +229,8 @@ class RepoFeatureEngineer:
         ]]
 
     def create_numeric_output(self):
-        """Create a clean numeric-only dataframe and save to CSV"""
-        self.handle_missing()
-        readme_features = self.extract_readme_features()
 
+        readme_features = self.extract_readme_features()
         repo_features = self.extract_repo_features()
 
         result = pd.concat([
@@ -227,10 +239,7 @@ class RepoFeatureEngineer:
             readme_features
         ], axis=1)
 
-        print(self.df.index[:10])
-        print(readme_features.index[:10])
-        print(self.df.shape, readme_features.shape)
-
+        result = result.dropna()
         result.to_csv('repo_data_numbers.csv', index=False)
         print("Complete! Saved repo_data_numbers.csv")
 
