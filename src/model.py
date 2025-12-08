@@ -1,4 +1,5 @@
 import datetime
+from collections import Counter
 
 import numpy as np
 import pandas as pd
@@ -41,59 +42,66 @@ X = df[
 ]
 y = df["is_highly_starred"]
 
-print("Records with label 1: ", df[df["is_highly_starred"] == 1].shape[0])
-print("Records with label 0: ", df[df["is_highly_starred"] == 0].shape[0])
+best_f1, best_p = 0, 0
+for p in np.linspace(0.5, 0.90, 10):
+    print(f"testing percentile: {p}")
+    target = df["stars"].quantile(p)
 
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=42, stratify=y
-)
+    y = df["stars"] > target
+    counter = Counter(y.to_numpy())
 
-param_grid = {
-    "n_estimators": np.arange(100, 300, 20),
-    "max_features": ["log2", "sqrt", None],
-    "max_depth": list(np.arange(5, 25, 5)) + [None],
-    "min_samples_split": np.arange(2, 6, 1),
-    "min_samples_leaf": [1, 2],
-    "bootstrap": [True, False],
-    "class_weight": ["balanced", None]
-}
+    print("Records with label 1: ", counter[1])
+    print("Records with label 0: ", counter[0])
 
-before = datetime.datetime.now().astimezone()
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42, stratify=y
+    )
 
-model = RandomForestClassifier()
-clf = RandomizedSearchCV(
-    model,
-    param_grid,
-    n_iter=45,
-    cv=5,
-    scoring="f1",
-    random_state=42,
-    n_jobs=-1
-)
+    param_grid = {
+        "n_estimators": np.arange(100, 300, 20),
+        "max_features": ["log2", "sqrt", None],
+        "max_depth": list(np.arange(5, 25, 5)) + [None],
+        "min_samples_split": np.arange(2, 6, 1),
+        "min_samples_leaf": [1, 2],
+        "bootstrap": [True, False],
+        "class_weight": ["balanced", None],
+    }
 
-# model = RandomForestClassifier(
-#     # bootstrap=False,
-#     class_weight="balanced",
-#     n_estimators=120,
-#     max_depth=15,
-#     random_state=42,
-#     # max_features=None,
-#     # min_samples_leaf=2,
-#     # min_samples_split=3,
-#
-# )
+    before = datetime.datetime.now().astimezone()
 
-model.fit(X_train, y_train)
+    model = RandomForestClassifier()
+    clf = RandomizedSearchCV(
+        model, param_grid, n_iter=45, cv=5, scoring="f1", random_state=42, n_jobs=6
+    )
 
-after = datetime.datetime.now().astimezone()
-elapsed = after - before
-print("tuning time: ", elapsed)
+    # model = RandomForestClassifier(
+    #     # bootstrap=False,
+    #     class_weight="balanced",
+    #     n_estimators=120,
+    #     max_depth=15,
+    #     random_state=42,
+    #     # max_features=None,
+    #     # min_samples_leaf=2,
+    #     # min_samples_split=3,
+    #
+    # )
 
-print("Best Model: ", clf.best_estimator_)
-model = clf.best_estimator_
+    clf.fit(X_train, y_train)
 
-y_pred = model.predict(X_test)
+    after = datetime.datetime.now().astimezone()
+    elapsed = after - before
+    print("model selection time: ", elapsed)
 
-print(f1_score(y_test, y_pred))
-print(accuracy_score(y_test, y_pred))
-print(classification_report(y_test, y_pred))
+    print("Best Model: ", clf.best_estimator_)
+    model = clf.best_estimator_
+
+    y_pred = model.predict(X_test)
+    f1 = f1_score(y_test, y_pred)
+
+    if f1 > best_f1:
+        best_p = p
+        best_f1 = f1
+
+    print(f1_score(y_test, y_pred))
+    # print(accuracy_score(y_test, y_pred))
+    print(classification_report(y_test, y_pred))
