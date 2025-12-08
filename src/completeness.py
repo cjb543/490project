@@ -21,6 +21,7 @@ class html_parser(HTMLParser):
         self.image_cnt: int = 0
         self.list_item_cnt: int = 0
         self.text_data: list[str] = []
+        self.table_data: list[str] = []
 
     def handle_starttag(self, tag, attrs) -> None:
         self.start_tags.append(tag)
@@ -59,8 +60,11 @@ class html_parser(HTMLParser):
             return
         if self.at_heading:
             self.heading_data.append(data)
-        elif not self.at_code and not self.at_table:
-            self.text_data.append(data)
+        elif not self.at_code:
+            if self.at_table:
+                self.table_data.append(data)
+            else:
+                self.text_data.append(data)
 
     def clear(self):
         self.reset()
@@ -76,6 +80,7 @@ class html_parser(HTMLParser):
         self.heading_data = []
         self.list_item_cnt = 0
         self.text_data = []
+        self.table_data = []
 
 
 class struture_completeness:
