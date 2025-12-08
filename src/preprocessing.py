@@ -8,8 +8,9 @@ import numpy as np
 import pandas as pd
 import spacy
 from textblob import TextBlob
+import textstat
 
-from completeness import struture_completeness
+from completeness import struture_completeness, html_parser
 
 # Authors: Christopher Benson, Matt Warner, Dave Joneja
 
@@ -30,7 +31,6 @@ try:
     nlp = spacy.load("en_core_web_sm", disable=["parser", "ner"])
 except:
     nlp = None
-
 
 class RepoFeatureEngineer:
     def __init__(self, csv_path):
@@ -75,6 +75,37 @@ class RepoFeatureEngineer:
         filtered_count = initial_count - len(self.df)
         print(f"Filtered out {filtered_count} repos with Chinese READMEs. Remaining: {len(self.df)}")
 
+    def clean_html(self, html_readme: str, max_len: int | None = 100000, include_table_data: bool = False) -> str:
+        parser = html_parser()
+        parser.feed(html_readme)
+
+        text = " ".join(parser.heading_data + parser.text_data + (parser.table_data if include_table_data else []))
+
+        if max_len is not None:
+            text = text[:max_len]
+        return text
+
+    def avg_sentence_length(self, text: str):
+        sentences = re.split(r'[.!?]+', text)
+        sentences = [s.strip() for s in sentences if len(s.strip()) > 1]
+
+        if not sentences:
+            return 0
+
+        word_counts = [len(s.split()) for s in sentences]
+        return sum(word_counts) / len(word_counts)
+
+    def get_tokens(self, text: str):
+        doc = nlp(text)
+        res = []
+
+        for tok in doc:
+            t = tok.text
+            if any([tok.is_space, tok.is_punct, tok.is_stop, tok.like_num, t.isdigit(), (tok.like_url or "http" in t.lower()), not t.isascii()]):
+                continue
+            res.append(tok)
+        return res
+
     def extract_readme_features(self):
         """Extract comprehensive README quality metrics"""
         features = []
@@ -93,24 +124,23 @@ class RepoFeatureEngineer:
 
             html_readme = str(row['html_readme']) if pd.notna(row['html_readme']) else ''
 
+            # Clean text
+            cleaned_text = self.clean_html(html_readme, include_table_data=True)
+
             # Token count using spaCy (linguistic tokens, not char count)
             try:
-                if nlp and html_readme:
-                    # Clean the text to avoid encoding issues
-                    clean_readme = html_readme[:100000].encode('utf-8', errors='ignore').decode('utf-8')
-                    doc = nlp(clean_readme)
-                    token_count = len(doc)
-                    noun_count = sum(1 for token in doc if token.pos_ == "NOUN")
-                    verb_count = sum(1 for token in doc if token.pos_ == "VERB")
-                    adj_count = sum(1 for token in doc if token.pos_ == "ADJ")
-                else:
-                    token_count = len(html_readme.split())
-                    noun_count = verb_count = adj_count = 0
+                tokens = self.get_tokens(cleaned_text)
+                token_count = len(tokens)
+                noun_count = sum(1 for token in tokens if token.pos_ == "NOUN")
+                verb_count = sum(1 for token in tokens if token.pos_ == "VERB")
+                adj_count = sum(1 for token in tokens if token.pos_ == "ADJ")
             except Exception:
-                token_count = len(html_readme.split())
+                words = cleaned_text.split()
+                token_count = len(words)
                 noun_count = verb_count = adj_count = 0
 
             d: dict[str, int] = sc.get_readme_completeness(html_readme)
+
             # Structure metrics
             header_count = d['heading_cnt']
             code_block_count = d['code_block_cnt']
@@ -129,18 +159,28 @@ class RepoFeatureEngineer:
             has_credits = d['credits']
             section_count = d['total']
 
-            # Readability metrics (using TextBlob for sentiment/subjectivity)
+            # text sentiment
             try:
-                blob = TextBlob(html_readme[:5000])
+                blob = TextBlob(cleaned_text)
                 sentiment_polarity = blob.sentiment.polarity
                 sentiment_subjectivity = blob.sentiment.subjectivity
             except:
                 sentiment_polarity = 0
                 sentiment_subjectivity = 0
 
+            cleaned_text = self.clean_html(html_readme, include_table_data=False)
+
             # Complexity metrics
-            avg_word_length = np.mean([len(w) for w in html_readme.split()]) if token_count > 0 else 0
-            avg_sentence_length = token_count / max(1, len(re.split(r'[.!?]+', html_readme)))
+            words = cleaned_text.split()
+            avg_word_length = np.mean([len(w) for w in words]) if words else 0
+            avg_sentence_length = self.avg_sentence_length(cleaned_text)
+
+            # Readability
+            flesch_kincade = textstat.flesch_kincaid_grade(cleaned_text)
+            flesch_reading_ease = textstat.flesch_reading_ease(cleaned_text)
+            gunning_fog = textstat.gunning_fog(cleaned_text)
+            dale_chall = textstat.dale_chall_readability_score(cleaned_text)
+            difficult_words = textstat.difficult_words(cleaned_text)
 
             completeness_indicators = [
                 has_description, has_installation, has_usage, has_contributing,
@@ -173,6 +213,11 @@ class RepoFeatureEngineer:
                 'sentiment_subjectivity': sentiment_subjectivity,
                 'avg_word_length': avg_word_length,
                 'avg_sentence_length': avg_sentence_length,
+                "flesch_kincade": flesch_kincade,
+                "flesch_reading_ease": flesch_reading_ease,
+                "gunning_fog": gunning_fog,
+                "dale_chall": dale_chall,
+                "difficult_words": difficult_words,
                 'completeness_score': completeness_score,
                 'total_sections': total_sections
             })
