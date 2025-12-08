@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
-df = pd.read_csv('repo_data_numbers.csv')
+df = pd.read_csv("repo_data_numbers.csv")
 print(df.columns)
 
 # Structural completeness
@@ -30,7 +30,7 @@ print(df.columns)
 #   - forks
 #   - forks_per_day
 #   - log_forks
-#   - forks_to_star_ratio
+#   - fork_to_star_ratio
 #   - is_highly_forked
 #   - contributors
 #   - log contributors
@@ -51,19 +51,47 @@ print(df.columns)
 #  - avg_sentence_length
 #  -
 
-forks = df['forks']
-stars = df['stars']
-contributors = df['contributors']
-engagement_score = df['engagement_score']
-
 
 # Correlation between completeness_score and stars
-
-completeness_score = df['completeness_score']
-is_highly_starred = df['is_highly_starred']
-
-plt.scatter(completeness_score, engagement_score)
+plt.scatter(df["completeness_score"], df["engagement_score"])
 plt.show()
-correlation_matrix = np.corrcoef(completeness_score, df['popularity_score'])
+correlation_matrix = np.corrcoef(df["completeness_score"], df["popularity_score"])
 pearson_r = correlation_matrix[0, 1]
 print(f"Correlation score between completeness_score and stars: {pearson_r}")
+
+# Tokens
+print(df.columns)
+success_cols = [
+    "stars",
+    "forks",
+    "contributors",
+    "forks_per_day",
+    "is_active",
+    "is_highly_starred",
+    "fork_to_star_ratio",
+]
+print(df[["token_count"] + success_cols].corr())
+sns.histplot(df["token_count"], bins=100)
+plt.xlim(0, 3000)
+plt.show()
+
+# Complete correlation matrix heatmap
+features = df.drop(["name", "owner", "language"], axis=1)
+corr = features.corr()
+
+plt.figure(figsize=(18, 14))
+
+mask = np.triu(np.ones_like(corr, dtype=bool))
+
+sns.heatmap(
+    corr,
+    mask=mask,
+    cmap="coolwarm",
+    annot=False,
+    linewidths=0.5,
+    cbar_kws={"shrink": 0.8},
+)
+
+plt.title("Feature Correlation Heatmap", fontsize=18, pad=20)
+plt.tight_layout()
+plt.show()
