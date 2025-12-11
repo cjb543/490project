@@ -39,7 +39,6 @@ class RepoFeatureEngineer:
         self._filter_chinese_readmes()
         self.__handle_missing()
         self.df.reset_index()
-        self.df.to_csv('filtered_readmes.csv', index=False)
 
     def __convert_to_html(self, readme: str):
         return mistune.html(readme)
@@ -263,9 +262,9 @@ class RepoFeatureEngineer:
         )
 
         # Binary success indicators (upper quartile)
-        df['is_highly_starred'] = (df['stars'] > df['stars'].quantile(0.75)).astype(int)
-        df['is_highly_forked'] = (df['forks'] > df['forks'].quantile(0.75)).astype(int)
-        df['is_active'] = (df['commits_per_day'] > df['commits_per_day'].quantile(0.75)).astype(int)
+        df['is_highly_starred'] = (df['stars'] > df['stars'].quantile(0.544444)).astype(int)
+        df['is_highly_forked'] = (df['forks'] > df['forks'].quantile(0.5444444)).astype(int)
+        df['is_active'] = (df['commits_per_day'] > df['commits_per_day'].quantile(0.5444444)).astype(int)
 
         return df[[
             'repo_age_days', 'repo_age_years', 'stars_per_day', 'forks_per_day',
@@ -291,5 +290,5 @@ class RepoFeatureEngineer:
 
 
 if __name__ == "__main__":
-    engineer = RepoFeatureEngineer('raw_repos.csv')
+    engineer = RepoFeatureEngineer('../data/raw_repos.csv')
     engineer.create_numeric_output()

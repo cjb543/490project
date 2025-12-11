@@ -6,8 +6,11 @@ from datetime import datetime, timezone
 import pandas as pd
 import requests
 from langdetect import LangDetectException, detect_langs
+from dotenv import load_dotenv
+import os
 
-from config import GITHUB_TOKEN
+load_dotenv()
+token = os.getenv("GITHUB_TOKEN")
 
 
 class GitHubScraper:
@@ -17,7 +20,7 @@ class GitHubScraper:
         self.headers = {"Authorization": f"Bearer {token}"}
         self.rate_limit_remaining = 5000
         self.rate_limit_reset = None
-        self.seen_repos = set()  # Track collected repos to avoid duplicates
+        self.seen_repos = set()
 
     def check_rate_limit(self):
         query = """
@@ -160,7 +163,7 @@ class GitHubScraper:
         }
         """
 
-        # Add random sorting using pushed date ranges for pseudo-randomization
+        # Added random sorting using pushed date ranges for pseudo-randomization
         search_query = f"language:{language} stars:{stars_range} fork:false sort:updated"
         if year_range:
             search_query += f" created:{year_range}"
@@ -260,7 +263,6 @@ class GitHubScraper:
             '5..50'
         ]
 
-        # Add date ranges for better randomization
         year_ranges = [
             '2024-01-01..2025-12-31',
             '2023-01-01..2023-12-31',
@@ -282,7 +284,7 @@ class GitHubScraper:
         last_count = 0
 
         while len(all_repos) < target_count:
-            # Check if we're stuck (no progress in last iteration)
+            # Check if we're stuck
             if len(all_repos) == last_count:
                 stuck_counter += 1
                 if stuck_counter >= 3:
@@ -353,7 +355,7 @@ class GitHubScraper:
                             else:
                                 print(f"  ✗ Filtered out: {data['owner']}/{data['name']}")
 
-                        # Save intermediate results
+                        # intermediate results
                         if len(all_repos) > 0 and len(all_repos) % 500 == 0:
                             self.save_to_csv(all_repos, f'github_repos_intermediate_{len(all_repos)}.csv')
 
@@ -364,12 +366,10 @@ class GitHubScraper:
                         cursor = info.get('endCursor')
                         pages += 1
 
-                    # Break out of this combo early if no new repos found
                     if not found_new_in_query and pages > 5:
                         print("  → No new repos in this combo, moving on...")
                         break
 
-            # Safety check: if we've done multiple full passes with no progress
             if len(all_repos) < target_count and stuck_counter == 0:
                 print(f"\nCompleted search cycle. Collected {len(all_repos)}/{target_count}")
                 if len(all_repos) < target_count * 0.7:
@@ -400,7 +400,7 @@ class GitHubScraper:
 
 
 if __name__ == "__main__":
-    scraper = GitHubScraper(GITHUB_TOKEN)
+    scraper = GitHubScraper(token)
     repos = scraper.scrape_repos(target_count=10000)
     df = scraper.save_to_csv(repos, 'raw_repos.csv')
     print(f"\n✅ Final count: {len(df)} repositories")
