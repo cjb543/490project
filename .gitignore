@@ -6,3 +6,5 @@ share/
 __pycache__/
 config.py
 *.csv
+*.png
+.env
