@@ -61,11 +61,6 @@ your work.
 - https://github.com/lij42
 - https://github.com/cjb543
 - https://github.com/mattgh2
-### Dependencies Used:
-- Anaconda: https://www.anaconda.com/download
-- Github CLI
-- GraphQL
-
 
 
 

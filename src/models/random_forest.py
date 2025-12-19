@@ -1,6 +1,5 @@
 import datetime
 from collections import Counter
-
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
@@ -41,22 +40,12 @@ X = df[
         "total_sections",
     ]
 ]
-# threshold = df["stars"].quantile(0.5444444)
-
 y = df["is_highly_starred"]
-#
-# counter = Counter(y)
-# print("Records with label 1: ", counter[1])
-# print("Records with label 0: ", counter[0])
-
-# y = df["is_highly_starred"]
 print("Records with label 1: ", df[df["is_highly_starred"] == 1].shape[0])
 print("Records with label 0: ", df[df["is_highly_starred"] == 0].shape[0])
-
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, random_state=42, stratify=y
 )
-
 param_grid = {
     "n_estimators": np.arange(100, 300, 20),
     "max_features": ["log2", "sqrt", None],
@@ -66,31 +55,24 @@ param_grid = {
     "bootstrap": [True, False],
     "class_weight": ["balanced", None],
 }
-
 before = datetime.datetime.now().astimezone()
-
 model = RandomForestClassifier()
 clf = RandomizedSearchCV(
     model, param_grid, n_iter=60, cv=5, scoring="f1", random_state=42, n_jobs=6
 )
 clf.fit(X_train, y_train)
-
 after = datetime.datetime.now().astimezone()
 elapsed = after - before
 print("model selection time: ", elapsed)
-
 print("Best Model: ", clf.best_estimator_)
 model = clf.best_estimator_
-
 y_pred = model.predict(X_test)
 f1 = f1_score(y_test, y_pred)
-
 importances = model.feature_importances_
 feature_names = X.columns.to_numpy()
 feature_imp_df = pd.DataFrame(
     {"Feature": feature_names, "Gini Importance": importances}
 ).sort_values("Gini Importance", ascending=False)
-
 print(feature_imp_df)
 plt.figure(figsize=(8, 4))
 plt.barh(feature_names, importances, color='skyblue')

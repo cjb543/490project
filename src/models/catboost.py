@@ -38,10 +38,7 @@ X = df[
         "total_sections",
     ]
 ]
-
 y = df["is_highly_starred"]
-
-
 model = CatBoostClassifier(
     loss_function="Logloss",
     eval_metric="F1",
@@ -51,13 +48,10 @@ model = CatBoostClassifier(
     thread_count=6,
     random_state=42
 )
-
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, random_state=42, stratify=y
 )
-
 pos_weight = (y_train.to_numpy() == 0).sum() / (y_train.to_numpy() == 1).sum()
-
 param_grid_cat = {
     "depth": [4, 6, 8, 10],
     "learning_rate": [0.01, 0.03, 0.1],
@@ -67,8 +61,6 @@ param_grid_cat = {
     "border_count": [64, 128, 254],
     "scale_pos_weight": [1.0, pos_weight],
 }
-
-
 clf_cat = RandomizedSearchCV(
     model,
     param_distributions=param_grid_cat,
@@ -78,12 +70,8 @@ clf_cat = RandomizedSearchCV(
     random_state=42,
     n_jobs=1,
 )
-
 clf_cat.fit(X_train, y_train)
-
 best_cat = clf_cat.best_estimator_
 y_pred = best_cat.predict(X_test)
-
-
 print("CatBoost F1:", f1_score(y_test, y_pred))
 print(classification_report(y_test, y_pred))

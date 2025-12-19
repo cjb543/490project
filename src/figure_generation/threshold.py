@@ -35,18 +35,14 @@ plt.plot(percentiles, f1_scores, marker="o")
 plt.xlabel("Success Threshold (Stars Percentile)")
 plt.ylabel("F1 Score (positive class)")
 plt.title("F1 Score vs. Popularity Percentile Threshold")
-
 plt.grid(True)
-
 best_idx = max(range(len(f1_scores)), key=lambda i: f1_scores[i])
 plt.scatter(percentiles[best_idx], f1_scores[best_idx], color="red")
 plt.text(
     percentiles[best_idx],
-
     f1_scores[best_idx] + 0.01,
     f"max F1={f1_scores[best_idx]:.3f}\n@ p={percentiles[best_idx]:.3f}",
     ha="center",
 )
-
 plt.tight_layout()
 plt.show()
